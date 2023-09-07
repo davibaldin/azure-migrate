@@ -1,0 +1,44 @@
+name: pipelines_templates_container_build_steps
+inputs:
+  registryServiceConnection:
+    required: false
+    default: None
+    type: string
+  containerFilename:
+    required: false
+    default: Dockerfile
+    type: string
+  tags:
+    required: false
+    default: latest
+    type: string
+  buildContext:
+    required: false
+    default: ''
+    type: string
+  repositoryName:
+    required: false
+    default: repo
+    type: string
+  imageName:
+    required: false
+    default: app
+    type: string
+  buildArgs:
+    required: false
+    default: '"FOO=bar"'
+    type: string
+runs:
+  using: composite
+  steps:
+  - name: App Version & Build Number
+    run: echo "--build-arg ${{ join('--build-arg ', fromJSON(inputs.buildArgs)) }}"
+    shell: bash
+  # Unable to determine registry '${{ parameters.registryServiceConnection }}' type. The service connection was not found or the authentication type not supported.
+  - name: Build App & Docker Image
+    run: docker build ${{ inputs.buildContext }} --file "Dockerfile" --build-arg ${{ join(' --build-arg ', fromJSON(inputs.buildArgs)) }} -t ${{ env.DOCKER_REGISTRY }}/${{ inputs.repositoryName }}/${{ inputs.imageName }}:${{ inputs.tags }}
+    shell: bash
+  # Unable to determine registry '${{ parameters.registryServiceConnection }}' type. The service connection was not found or the authentication type not supported.
+  - name: Push Docker Image
+    run: docker push ${{ env.DOCKER_REGISTRY }}/${{ inputs.repositoryName }}/${{ inputs.imageName }}:${{ inputs.tags }}
+    shell: bash
