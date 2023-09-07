@@ -1,0 +1,24 @@
+name: pipelines_templates_prepare_remote
+runs:
+  using: composite
+  steps:
+#   # This action only supports checking out GitHub repositories
+#   - name: Checkout SkyLab Templates
+#     uses: actions/checkout@v3.6.0
+#     with:
+#       repository: devops-toolbox
+  - name: Checkout SkyLab Repo
+    uses: actions/checkout@v3.6.0
+    with:
+      path: s/local
+#   # This action only supports checking out GitHub repositories
+#   - name: Checkout Source Code Repo
+#     uses: actions/checkout@v3.6.0
+#     with:
+#       repository: remote
+#       path: s/remote
+  - name: Repositories List
+    run: |-
+      pwd
+      dir ${{ github.workspace }}
+    shell: bash
