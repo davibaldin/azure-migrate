@@ -1,0 +1,247 @@
+name: demo/skylab-demo-frontend
+on:
+  workflow_dispatch:
+    inputs:
+      remoteBranch:
+        description: Remote branch name
+        default: development
+        required: false
+      releaseName:
+        description: Deployment release name
+        default: demowebapp
+        required: false
+      imageName:
+        description: Container image name
+        default: demowebapp
+        required: false
+      repositoryName:
+        description: Container registry repository name
+        default: devops_engrg
+        required: false
+env:
+  chartLocation: devops-toolbox/helm
+  chartName: skylab-template
+  chartVersion: 1.0
+  checkmarkxFullTeamName: CxServer\In\Fx\Satheesh_Rajarathinam
+  checkmarxServiceConnection: Checkmarx-sac_devopseng
+  environmentDevConnectionType: Openshift
+  environmentDevNamespace: demo-dev
+  environmentDevServiceConnection: OKD4Labs-skylab-projects-sac_devopsrep
+  environmentProdConnectionType: Openshift
+  environmentProdNamespace: demo
+  environmentProdServiceConnection: Openshift-esp04-skylab-projects-sac_devopsrep
+  environmentQaConnectionType: Openshift
+  environmentQaNamespace: demo-qa
+  environmentQaServiceConnection: OKDDev-skylab-projects-sac_devopsrep
+  environmentUatConnectionType: Openshift
+  environmentUatNamespace: demo-test
+  environmentUatServiceConnection: Openshift-esp04-skylab-projects-sac_devopsrep
+  isDevelopmentBranch: "$[eq(variables['remoteBranchName'], 'development')]"
+  isReleaseBranch: "$[eq(variables['remoteBranchName'], 'release')]"
+  major: 2
+  maxHighVulnerabilities: 0
+  maxLowVulnerabilities: 20
+  maxMediumVulnerabilities: 5
+  minor: 0
+  patch: 0
+  registryServiceConnection: harbor-master-common
+  rev: "$[counter(variables['patch'], 1)]"
+  tags: latest
+  version: latest
+jobs:
+  validateAndBuild-prepareAndbuild:
+    env:
+      DOCKER_REGISTRY:
+    name: Prepare & Build
+    runs-on: ubuntu-latest
+    steps:
+    - name: checkout
+      uses: actions/checkout@v3.6.0
+    - uses: "./.github/actions/pipelines_templates_prepare_remote"
+    - name: Copy Required files
+      run: |-
+        chmod +x local/run.sh
+        cp ${{ github.workspace }}/local/run.sh remote/
+      shell: bash
+    - uses: "./.github/actions/pipelines_templates_test_checkmarx"
+      with:
+        projectName: "${{ inputs.releaseName }}"
+        checkmarxService: "${{ env.checkmarxServiceConnection }}-${{ env.System_TeamProject }}"
+        maxHighVulnerabilities: "${{ env.maxHighVulnerabilities }}"
+        maxMediumVulnerabilities: "${{ env.maxMediumVulnerabilities }}"
+        maxLowVulnerabilities: "${{ env.maxLowVulnerabilities }}"
+    - uses: "./.github/actions/pipelines_templates_container_build_steps"
+      with:
+        registryServiceConnection: "${{ env.registryServiceConnection }}-${{ env.System_TeamProject }}"
+        containerFilename: "${{ github.workspace }}/local/Dockerfile"
+        tags: "${{ github.run_number }}"
+        buildContext: "${{ github.workspace }}/remote"
+        repositoryName: "${{ inputs.repositoryName }}"
+        imageName: "${{ inputs.imageName }}"
+        buildArgs: '["APP_VERSION=$(version)","BUILD_NUMBER=$(Build.BuildNumber)"]'
+  deployDev-Deploy:
+    name: Deploy DEV
+    needs:
+    - validateAndBuild-prepareAndbuild
+    runs-on: ubuntu-latest
+    environment:
+      name: "${{ env.System_TeamProject }}-dev"
+    if: (success() && env.isDevelopmentBranch == true) && github.RUN_NUMBER == 1
+    steps:
+    - name: checkout
+      uses: actions/checkout@v3.6.0
+    - name: download artifact
+      uses: actions/download-artifact@v3.0.1
+    - uses: "./.github/actions/pipelines_templates_prepare_remote"
+#     # section was not transformed because it contains unsupported usage of the `each` syntax
+#     - path: pipelines/templates/helm-prepare.yml@devops-toolbox
+#       parameters:
+#         chartName: "${{ env.chartName }}"
+#         chartLocation: "${{ env.chartLocation }}"
+#         copyFiles:
+#         - "${{ github.workspace }}/local/*"
+    - uses: "./.github/actions/pipelines_templates_docker_retag"
+      with:
+        repositoryName: "${{ inputs.repositoryName }}"
+        imageName: "${{ inputs.imageName }}"
+        imageTag: "${{ github.run_number }}"
+        newImageTag: dev
+    - uses: "./.github/actions/pipelines_templates_helm_deploy_steps"
+      with:
+        registryServiceConnection: "${{ env.registryServiceConnection }}-${{ env.System_TeamProject }}"
+        connectionType: "${{ env.environmentDevConnectionType }}"
+        appVersion: "${{ env.version }}"
+        chartVersion: "${{ env.chartVersion }}"
+        chartName: "${{ env.chartName }}"
+        chartLocation: "${{ env.chartLocation }}"
+        kubernetesServiceConnection: "${{ env.environmentDevServiceConnection }}-${{ env.System_TeamProject }}"
+        namespace: "${{ env.environmentDevNamespace }}"
+        releaseName: "${{ inputs.releaseName }}"
+        valuesFilename: "${{ github.workspace }}/local/values-dev.yml"
+        overrideValues: '["image.tag=dev"]'
+  deployQa-Deploy:
+    name: Deploy QA
+    needs:
+    - deployDev-Deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: "${{ env.System_TeamProject }}-qa"
+    if: github.RUN_NUMBER == 1
+    steps:
+    - name: checkout
+      uses: actions/checkout@v3.6.0
+    - name: download artifact
+      uses: actions/download-artifact@v3.0.1
+    - uses: "./.github/actions/pipelines_templates_prepare_remote"
+#     # section was not transformed because it contains unsupported usage of the `each` syntax
+#     - path: pipelines/templates/helm-prepare.yml@devops-toolbox
+#       parameters:
+#         chartName: "${{ env.chartName }}"
+#         chartLocation: "${{ env.chartLocation }}"
+#         copyFiles:
+#         - "${{ github.workspace }}/local/*"
+    - uses: "./.github/actions/pipelines_templates_docker_retag"
+      with:
+        repositoryName: "${{ inputs.repositoryName }}"
+        imageName: "${{ inputs.imageName }}"
+        imageTag: "${{ github.run_number }}"
+        newImageTag: qa
+    - uses: "./.github/actions/pipelines_templates_helm_deploy_steps"
+      with:
+        registryServiceConnection: "${{ env.registryServiceConnection }}-${{ env.System_TeamProject }}"
+        connectionType: "${{ env.environmentQaConnectionType }}"
+        appVersion: "${{ env.version }}"
+        chartVersion: "${{ env.chartVersion }}"
+        chartName: "${{ env.chartName }}"
+        chartLocation: "${{ env.chartLocation }}"
+        kubernetesServiceConnection: "${{ env.environmentQaServiceConnection }}-${{ env.System_TeamProject }}"
+        namespace: "${{ env.environmentQaNamespace }}"
+        releaseName: "${{ inputs.releaseName }}"
+        valuesFilename: "${{ github.workspace }}/local/values-qa.yml"
+        overrideValues: '"image.tag=qa"'
+  deployUat-Deploy:
+    name: Deploy UAT
+    needs:
+    - deployQa-Deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: "${{ env.System_TeamProject }}-uat"
+    if: github.RUN_NUMBER == 1
+    steps:
+    - name: checkout
+      uses: actions/checkout@v3.6.0
+    - name: download artifact
+      uses: actions/download-artifact@v3.0.1
+    - uses: "./.github/actions/pipelines_templates_prepare_remote"
+#     # section was not transformed because it contains unsupported usage of the `each` syntax
+#     - path: pipelines/templates/helm-prepare.yml@devops-toolbox
+#       parameters:
+#         chartName: "${{ env.chartName }}"
+#         chartLocation: "${{ env.chartLocation }}"
+#         copyFiles:
+#         - "${{ github.workspace }}/local/*"
+    - uses: "./.github/actions/pipelines_templates_docker_retag"
+      with:
+        repositoryName: "${{ inputs.repositoryName }}"
+        imageName: "${{ inputs.imageName }}"
+        imageTag: "${{ github.run_number }}"
+        newImageTag: uat
+    - uses: "./.github/actions/pipelines_templates_helm_deploy_steps"
+      with:
+        registryServiceConnection: "${{ env.registryServiceConnection }}-${{ env.System_TeamProject }}"
+        connectionType: "${{ env.environmentUatConnectionType }}"
+        appVersion: "${{ env.version }}"
+        chartVersion: "${{ env.chartVersion }}"
+        chartName: "${{ env.chartName }}"
+        chartLocation: "${{ env.chartLocation }}"
+        kubernetesServiceConnection: "${{ env.environmentUatServiceConnection }}-${{ env.System_TeamProject }}"
+        namespace: "${{ env.environmentUatNamespace }}"
+        releaseName: "${{ inputs.releaseName }}"
+        valuesFilename: "${{ github.workspace }}/local/values-uat.yml"
+        overrideValues: '"image.tag=uat"'
+  deployProduction-Deploy:
+    name: Deploy PROD
+    needs:
+    - deployUat-Deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: "${{ env.System_TeamProject }}-prod"
+    if: github.RUN_NUMBER == 1
+    steps:
+    - name: checkout
+      uses: actions/checkout@v3.6.0
+    - name: download artifact
+      uses: actions/download-artifact@v3.0.1
+    - uses: "./.github/actions/pipelines_templates_prepare_remote"
+#     # section was not transformed because it contains unsupported usage of the `each` syntax
+#     - path: pipelines/templates/helm-prepare.yml@devops-toolbox
+#       parameters:
+#         chartName: "${{ env.chartName }}"
+#         chartLocation: "${{ env.chartLocation }}"
+#         copyFiles:
+#         - "${{ github.workspace }}/local/*"
+    - uses: "./.github/actions/pipelines_templates_docker_retag"
+      with:
+        repositoryName: "${{ inputs.repositoryName }}"
+        imageName: "${{ inputs.imageName }}"
+        imageTag: prod
+        newImageTag: prod-last
+    - uses: "./.github/actions/pipelines_templates_docker_retag"
+      with:
+        repositoryName: "${{ inputs.repositoryName }}"
+        imageName: "${{ inputs.imageName }}"
+        imageTag: "${{ github.run_number }}"
+        newImageTag: prod
+    - uses: "./.github/actions/pipelines_templates_helm_deploy_steps"
+      with:
+        registryServiceConnection: "${{ env.registryServiceConnection }}-${{ env.System_TeamProject }}"
+        connectionType: "${{ env.environmentProdConnectionType }}"
+        appVersion: "${{ env.version }}"
+        chartVersion: "${{ env.chartVersion }}"
+        chartName: "${{ env.chartName }}"
+        chartLocation: "${{ env.chartLocation }}"
+        kubernetesServiceConnection: "${{ env.environmentProdServiceConnection }}-${{ env.System_TeamProject }}"
+        namespace: "${{ env.environmentProdNamespace }}"
+        releaseName: "${{ inputs.releaseName }}"
+        valuesFilename: "${{ github.workspace }}/local/values-prod.yml"
+        overrideValues: '"image.tag=prod"'
