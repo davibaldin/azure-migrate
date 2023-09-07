@@ -1,0 +1,46 @@
+name: pipelines_templates_test_checkmarx
+inputs:
+  projectName:
+    required: false
+    type: string
+  checkmarxService:
+    required: false
+    type: string
+  fullTeamName:
+    required: false
+    default: "$(checkmarkxFullTeamName)"
+    type: string
+  maxHighVulnerabilities:
+    required: false
+    default: 2
+    type: string
+  maxMediumVulnerabilities:
+    required: false
+    default: 20
+    type: string
+  maxLowVulnerabilities:
+    required: false
+    default: 50
+    type: string
+runs:
+  using: composite
+  steps:
+#   # This item has no matching transformer
+#   - task: Application security testing@2022
+#     displayName: Checkmarx Scan
+#     inputs:
+#       projectName: "${{ inputs.projectName }}"
+#       enableProxy: false
+#       enableSastScan: true
+#       CheckmarxService: "${{ inputs.checkmarxService }}"
+#       customPreset: OWASP TOP 10
+#       fullTeamName: "${{ inputs.fullTeamName }}"
+#       generatePDFReport: true
+#       vulnerabilityThreshold: true
+#       failBuildForNewVulnerabilitiesEnabled: false
+#       failBuildForNewVulnerabilitiesSeverity: MEDIUM
+#       high: "${{ inputs.maxHighVulnerabilities }}"
+#       medium: "${{ inputs.maxMediumVulnerabilities }}"
+#       low: "${{ inputs.maxLowVulnerabilities }}"
+#       avoidDuplicateScans: true
+#       enableDependencyScan: false

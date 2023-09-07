@@ -1,0 +1,30 @@
+name: pipelines_templates_docker_retag
+inputs:
+  repositoryName:
+    required: false
+    default: repo
+    type: string
+  imageName:
+    required: false
+    default: app
+    type: string
+  imageTag:
+    required: false
+    type: string
+  newImageTag:
+    required: false
+    type: string
+runs:
+  using: composite
+  steps:
+  - name: Retag Docker Image
+    run: |-
+      docker pull harbormaster.flex.com/${{ inputs.repositoryName }}/${{ inputs.imageName }}:${{ inputs.imageTag }}
+      if [[ "$?" -ne 0 ]]
+      then
+        echo "${{ inputs.imageName }} image not available."
+        exit 0
+      fi
+      docker tag  harbormaster.flex.com/${{ inputs.repositoryName }}/${{ inputs.imageName }}:${{ inputs.imageTag }} harbormaster.flex.com/${{ inputs.repositoryName }}/${{ inputs.imageName }}:${{ inputs.newImageTag }}
+      docker push harbormaster.flex.com/${{ inputs.repositoryName }}/${{ inputs.imageName }}:${{ inputs.newImageTag }}
+    shell: bash

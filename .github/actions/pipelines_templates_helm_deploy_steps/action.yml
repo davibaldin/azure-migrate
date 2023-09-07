@@ -1,0 +1,110 @@
+name: pipelines_templates_helm_deploy_steps
+inputs:
+  registryServiceConnection:
+    required: false
+    default: None
+    type: string
+  connectionType:
+    required: false
+    default: Openshift
+    type: string
+  appVersion:
+    required: false
+    default: 1.0.0
+    type: string
+  chartVersion:
+    required: false
+    default: '1.0'
+    type: string
+  chartName:
+    required: false
+    type: string
+  chartLocation:
+    required: false
+    default: devops-toolbox/helm
+    type: string
+  kubernetesServiceConnection:
+    required: false
+    default: None
+    type: string
+  timeout:
+    required: false
+    default: 600s
+    type: string
+  namespace:
+    required: false
+    type: string
+  releaseName:
+    required: false
+    type: string
+  valuesFilename:
+    required: false
+    type: string
+  overrideValues:
+    required: false
+    default: '""'
+    type: string
+runs:
+  using: composite
+  steps:
+  - name: Install Helm
+    uses: azure/setup-helm@v3.5
+    with:
+      version: latest
+  - name: Install Helm
+    uses: azure/setup-kubectl@v3.2
+    with:
+      version: latest
+  - name: Helm Lint
+    run: |-
+      echo "${{inputs.connectionType}}"
+      echo "${{ inputs.chartLocation }}/${{ inputs.chartName }} --values ${{ inputs.valuesFilename }}"
+      helm lint ${{ inputs.chartLocation }}/${{ inputs.chartName }} --values ${{ inputs.valuesFilename }}
+      helm template ${{ inputs.chartLocation }}/${{ inputs.chartName }} --values ${{ inputs.valuesFilename }}
+    shell: bash
+  - name: Helm Package
+    shell: bash
+    run: helm package --version ${{ inputs.chartVersion }} --destination ${{ runner.temp }} --app-version=${{ inputs.appVersion }} ${{ inputs.chartLocation }}/${{ inputs.chartName }}
+  - name: Helm Package List
+    run: dir ${{ runner.temp }}
+    shell: bash
+  - name: Kubernetes Login
+    if: inputs.connectionType == 'Kubernetes'
+    uses: azure/k8s-set-context@v3.0
+    with:
+      method: service-account
+      k8s-url: "${{ secrets.K8S_URL }}"
+      k8s-secret: "${{ secrets.K8S_SECRET }}"
+  - name: Kubernetes Login
+    if: inputs.connectionType == 'Kubernetes'
+    shell: bash
+    working-directory: "${{ github.workspace }}"
+    run: kubectl login -n "${{ inputs.namespace }}" -o json
+  - name: Helm Deploy
+    if: inputs.connectionType == 'Kubernetes'
+    uses: azure/k8s-set-context@v3.0
+    with:
+      method: service-account
+      k8s-url: "${{ secrets.K8S_URL }}"
+      k8s-secret: "${{ secrets.K8S_SECRET }}"
+  - name: Helm Deploy
+    if: inputs.connectionType == 'Kubernetes'
+    shell: bash
+    run: helm upgrade --namespace ${{ inputs.namespace }} --install --reset-values --values ${{ inputs.valuesFilename }} --set ${{ join(',',fromJSON(inputs.overrideValues)) }} --wait --timeout ${{ inputs.timeout }} ${{ inputs.releaseName }} ${{ runner.temp }}/${{ inputs.chartName }}-${{ inputs.chartVersion }}.tgz --version ${{ inputs.chartVersion }}
+#   # This item has no matching transformer
+#   - task: oc-cmd@3
+#     displayName: OpenShift Login
+#     inputs:
+#       connectionType: OpenShift Connection Service
+#       openshiftService: "${{ inputs.kubernetesServiceConnection }}"
+#       cmd: oc project ${{ inputs.namespace }}
+#       uselocalOc: true
+#     condition: eq(inputs.connectionType, 'Openshift')
+  - name: OpenShift List Secrets
+    if: inputs.connectionType == 'Openshift'
+    run: oc get secrets
+    shell: bash
+  - name: Helm Deploy
+    if: inputs.connectionType == 'Openshift'
+    shell: bash
+    run: helm upgrade --namespace ${{ inputs.namespace }} --install --reset-values --values ${{ inputs.valuesFilename }} --set ${{ join(',',fromJSON(inputs.overrideValues)) }} --wait --timeout ${{ inputs.timeout }} ${{ inputs.releaseName }} ${{ runner.temp }}/${{ inputs.chartName }}-${{ inputs.chartVersion }}.tgz --version ${{ inputs.chartVersion }}
